@@ -1,0 +1,56 @@
+apply plugin: 'com.jfrog.bintray'
+apply plugin: 'maven'
+apply plugin: 'maven-publish'
+
+bintray {
+    user = hasProperty("BINTRAY_USER") ? getProperty("BINTRAY_USER") : getProperty("BINTRAY_USER")
+    key = hasProperty("BINTRAY_USER") ? getProperty("BINTRAY_USER") : getProperty("BINTRAY_KEY")
+    configurations = ['archives']
+    publications = ['MyPublication']
+    publish = true //[Default: false] Whether version should be auto published after an upload    
+    override = true //[Default: false] Whether to override version artifacts already published  
+    pkg {
+        repo = 'maven'
+        userOrg = user
+        name = PROJ_NAME
+        desc = PROJ_DESCRIPTION
+        websiteUrl = PROJ_WEBSITEURL
+        issueTrackerUrl = PROJ_ISSUETRACKERURL
+        vcsUrl = PROJ_VCSURL
+        licenses = ['Apache-2.0']
+        publicDownloadNumbers = true
+
+        version {
+            name = PROJ_VERSION
+            released = new Date()
+            vcsTag = PROJ_VERSION
+        }
+    }
+}
+
+task sourceJar(type: Jar) {
+    from android.sourceSets.main.java.srcDirs
+    classifier "source"
+}
+
+publishing {
+    publications {
+        MyPublication(MavenPublication) {
+            groupId PROJ_GROUP
+            artifactId PROJ_ARTIFACTID
+            version PROJ_VERSION
+            artifact(sourceJar)
+            artifact "${project.buildDir}/outputs/aar/${project.name}-release.aar"
+
+            pom.withXml {
+                def dependenciesNode = asNode().appendNode('dependencies')
+                configurations.compile.allDependencies.each {
+                    def dependencyNode = dependenciesNode.appendNode('dependency')
+                    dependencyNode.appendNode('groupId', it.group)
+                    dependencyNode.appendNode('artifactId', it.name)
+                    dependencyNode.appendNode('version', it.version)
+                }
+            }
+        }
+    }
+}
