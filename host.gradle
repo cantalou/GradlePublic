@@ -27,6 +27,7 @@ afterEvaluate {
         def scope = variant.getVariantData().getScope()
         String mergeTaskName = scope.getMergeResourcesTask().name
         def mergeTask = tasks.getByName(mergeTaskName)
+        println("mergeTask ${mergeTask}")
         //第2件事
         mergeTask.doLast {
             String destPath = mergeTask.outputDir.absolutePath + '/values/';
