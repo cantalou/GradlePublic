@@ -33,7 +33,7 @@ afterEvaluate {
             String destPath = mergeTask.outputDir.absolutePath + '/values/';
             def localFilePath = buildscript.sourceFile != null ? buildscript.sourceFile.getParentFile() : null;
             if(localFilePath == null && file("${rootDir}/public.xml").extsts()){
-               localFilePath = file("${rootDir}")
+                localFilePath = file("${rootDir}")
             }
             if (localFilePath != null) {
                 println '编译宿主资源时插入' + localFilePath.absolutePath + '/public.xml 到' + destPath + ', 用来控制宿主资源id分组'
@@ -70,10 +70,11 @@ afterEvaluate {
                 }
             }
         }
+
+
     }
 
     if (gradle.startParameter.taskNames.find {
-        println ">>>>>>执行命令: " + it
         it.contains("assemble") || it.startsWith("build") || it.startsWith("aR")
     } != null) {
         //第4件事
@@ -83,10 +84,33 @@ afterEvaluate {
                     task.doLast {
                         println '编译完成后根据资源中间文件以及导出的资源id表生成一份主题patch包，编译非独立插件时需要此包'
                         createThemePatch(variant.name)
+                        buildJarTask.execute();
                     }
                 }
             }
         }
+    }
+
+    task buildJarTask(type: Jar) {
+
+        destinationDir = file("${buildDir}/intermediates/bundles/")
+        appendix = ""
+        baseName = "androidJar"
+        version = "1.0.0"
+        classifier = "debug"
+
+        //后缀名
+        extension = "jar"
+        archiveName = "class.jar"
+
+        //需打包的资源所在的路径集
+        def srcClassDir = []
+        android.applicationVariants.all { variant ->
+            srcClassDir.add("${project.buildDir.absolutePath}/intermediates/classes/${variant.dirName}")
+        }
+        println("copy from ${srcClassDir}")
+        //初始化资源路径集
+        from srcClassDir
     }
 }
 
