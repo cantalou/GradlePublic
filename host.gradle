@@ -31,10 +31,14 @@ afterEvaluate {
         //第2件事
         mergeTask.doLast {
             String destPath = mergeTask.outputDir.absolutePath + '/values/';
-            if (buildscript.sourceFile != null) {
-                println '编译宿主资源时插入' + buildscript.sourceFile.getParentFile().absolutePath + '/public.xml 到' + destPath + ', 用来控制宿主资源id分组'
+            def localFilePath = buildscript.sourceFile != null ? buildscript.sourceFile.getParentFile() : null;
+            if(localFilePath == null && file("${rootDir}/public.xml").extsts()){
+               localFilePath = file("${rootDir})
+            }
+            if (localFilePath != null) {
+                println '编译宿主资源时插入' + localFilePath.absolutePath + '/public.xml 到' + destPath + ', 用来控制宿主资源id分组'
                 copy {
-                    from(buildscript.sourceFile.getParentFile()) {
+                    from(localFilePath) {
                         include 'public.xml'
                     }
                     into(destPath)
