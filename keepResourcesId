@@ -1,0 +1,292 @@
+android.aaptOptions.additionalParameters("-P", "${buildDir}/outputs/public.xml")
+
+ext.publicDir = "${rootDir}/public/"
+file(publicDir).mkdirs()
+ext.publicFile = file("${publicDir}/public.xml")
+
+afterEvaluate {
+
+    android.applicationVariants.each { variant ->
+
+        def capitalizeName = variant.name.capitalize()
+
+        def mergeTask = tasks.findByName("merge${capitalizeName}Resources")
+        def task = tasks.findByName("process${capitalizeName}Resources");
+        task.doLast {
+
+            def valuesDir = "${mergeTask.outputDir}/values"
+            def generatedPublic = file("${buildDir}/outputs/public.xml")
+            if (!generatedPublic.exists()) {
+                println "不存在${generatedPublic}文件"
+                return
+            }
+
+            def skipItem = [] as HashSet
+            def skipPublic = file("${publicDir}/public-skip.xml")
+            def skipXmlContent
+            if (skipPublic.exists() && !(skipXmlContent = skipPublic.getText()).empty) {
+                def skipResources = new XmlSlurper().parseText(skipXmlContent)
+                skipResources.public.each {
+                    skipItem << it.@name.text()
+                }
+                println("存在需要忽略的节点${skipItem.toString()}")
+            }
+
+            if (!publicFile.exists()) {
+                println "旧的public.xml文件不存在直接复制一份"
+                copy {
+                    from generatedPublic
+                    into publicDir
+                }
+                reorderPublicXml skipItem
+                println "根据public.xml生成ids.xml文件"
+                generateId("${valuesDir}/values.xml")
+                return
+            }
+
+            //新导出的public节点
+            def newItemSet = [] as HashSet
+            def resources = new XmlSlurper().parse(generatedPublic)
+            resources.public.each {
+                newItemSet << it.@name.text()
+            }
+
+            //旧的public节点
+            def oldItem = []
+            def deletedItem = []
+            def oldResources = new XmlSlurper().parse(publicFile)
+            oldResources.public.each {
+                def name = it.@name.text()
+                def type = it.@type.text()
+                def id = it.@id.text()
+                if (newItemSet.contains(name)) {
+                    oldItem << new Item(type, name, id)
+                } else if (!skipItem.contains(name)) {
+                    deletedItem << new Item(type, type + id.substring(6, 10), id)
+                }
+            }
+
+            def padding = []
+            if (deletedItem.size() > 0) {
+
+                println "关闭proguard模式下存在被删除的节点, 新版本public.xml 文件删除了${deletedItem.toString()}资源,需要增加public-padding节点"
+                def publicPadding = file("${publicDir}/public-padding.xml")
+                def publicPaddingXmlText
+                if (publicPadding.exists() && !(publicPaddingXmlText = publicPadding.getText()).empty) {
+                    def paddingResources = new XmlSlurper().parseText(publicPaddingXmlText)
+                    paddingResources.children().each {
+                        def type = it.@type.text()
+                        def id = it.@start.text()
+                        padding << new Item(type, type + id.substring(6, 10), id)
+                    }
+                    println "旧public-padding.xml 文件存在,已有节点${publicPadding.toString()}"
+                }
+                padding.addAll(deletedItem)
+
+                //重新生成public-padding节点
+                publicPadding.withWriter { out ->
+                    out.println("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<resources>")
+                    padding.each {
+                        out.println("<public-padding type=\"${it.type}\" name=\"${it.name}\" start=\"${it.id}\" end=\"${it.id}\"/>")
+                    }
+                    out.println("</resources>")
+                }
+
+                writePublicXml oldItem
+            }
+
+            def existPublicInValues = file("${valuesDir}/public.xml").exists()
+            if (!existPublicInValues) {
+                println "values文件夹不存在public.xml文件,需要复制public.xml, public-padding.xml, ids.xml文件到values文件夹下重新执行process${capitalizeName}Resources task"
+                if (!file("${publicDir}/ids.xml").exists()) {
+                    println "ids.xml文件不存在重新生成"
+                    generateId("${valuesDir}/values.xml")
+                }
+                copyPublicFilesIntoValuesDir valuesDir
+                it.execute()
+            } else if (newItemSet.size() == oldItem.size() + padding.size() + skipItem.size() && newItemSet.containsAll(oldItem*.name)) {
+                println "新旧public文件内容相同"
+            } else {
+                println "values文件夹存在public.xml文件,有新增节点, 直接复制一份"
+                copy {
+                    from generatedPublic
+                    into publicDir
+                }
+                reorderPublicXml skipItem
+                println "重新生成ids.xml文件"
+                generateId("${valuesDir}/values.xml")
+            }
+        }
+    }
+
+
+    task buildJarTask(type: Jar) {
+
+        destinationDir = file("${buildDir}/intermediates/bundles/")
+        appendix = ""
+        baseName = "androidJar"
+        version = "1.0.0"
+        classifier = "debug"
+
+        //后缀名
+        extension = "jar"
+        archiveName = "class.jar"
+
+        //需打包的资源所在的路径集
+        def srcClassDir = []
+        android.applicationVariants.all { variant ->
+            srcClassDir.add("${project.buildDir.absolutePath}/intermediates/classes/${variant.dirName}")
+        }
+        //初始化资源路径集
+        from srcClassDir
+        exclude '**/R.class'
+        exclude '**/R$*.class'
+    }
+
+
+    if (gradle.startParameter.taskNames.find {
+        it.contains("assemble")
+    } != null) {
+        //第4件事
+        android.applicationVariants.all { variant ->
+            tasks.each { task ->
+                if (task.name.equalsIgnoreCase("assemble" + variant.name)) {
+                    task.doLast {
+                        println "导出jar包"
+                        buildJarTask.execute()
+                    }
+                }
+            }
+        }
+    }
+
+}
+/**
+ * 根据public-skip文件的描述删除多余的节点, 重新编号资源id
+ * @param items
+ * @return
+ */
+def reorderPublicXml(def skipItem) {
+
+    if (skipItem.isEmpty()) {
+        return;
+    }
+
+    println "存在public-skip.xml文件重新排序资源id"
+    def resources = new XmlSlurper().parse(file("${publicDir}/public.xml"))
+    def oldItem = []
+    def lastType
+    def lastId
+    resources.public.each {
+        def name = it.@name.text()
+        def type = it.@type.text()
+        def id = it.@id.text()
+        if (!skipItem.contains(name)) {
+            if (type.equals(lastType)) {
+                lastId = Integer.parseInt(id, 16)
+                lastType = type
+            } else {
+                lastId++
+            }
+            oldItem << new Item(type, name, Integer.toString(lastId, 16))
+        }
+    }
+
+    println "将${skipItem.toString()}从public.xml文件中删除"
+    writePublicXml oldItem
+}
+
+def writePublicXml(def items) {
+
+    def oldPublic = file("${publicDir}/public.xml")
+    oldPublic.withWriter { out ->
+        out.println("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<resources>")
+        items.each {
+            out.println("<public type=\"${it.type}\" name=\"${it.name}\"  id=\"${it.id}\" />")
+        }
+        out.println("</resources>")
+    }
+}
+
+def copyPublicFilesIntoValuesDir(def destDir) {
+    copy {
+        from publicDir
+        into destDir
+        include 'ids.xml', 'public.xml', 'public-padding.xml'
+    }
+}
+
+/**
+ * 生成ids.xml文件, 再通过public.xml文件固定这些id值
+ *
+ * @param valueFile 合并后的资源文件
+ * @param skipItem 需要忽略的节点
+ * @return
+ */
+def generateId(def valueFile) {
+
+    if (!publicFile.exists()) {
+        return;
+    }
+
+    //app中已定义的id数据
+    def existsIds = []
+    [file(valueFile), file("${publicDir}/publid-padding.xml")].each {
+        if (it.exists()) {
+            def content = it.getText()
+            if (!content.empty) {
+                new XmlSlurper().parseText(content).item.each {
+                    def type = it.@type.text()
+                    if (type.equals("id")) {
+                        def name = it.@name.text()
+                        existsIds.add(name)
+                    }
+                }
+            }
+        }
+    }
+
+
+    def ids = []
+    def resources = new XmlSlurper().parse(publicFile)
+    resources.public.each {
+        def type = it.@type.text()
+        def name = it.@name.text()
+        if (type.equals("id") && !existsIds.contains(name)) {
+            ids.add(name)
+        }
+    }
+
+    def destIds = file("${publicDir}/ids.xml")
+    def writer = new FileWriter(destIds)
+    writer.println "<?xml version=\"1.0\" encoding=\"utf-8\"?>"
+    writer.println "<resources>\n"
+    ids.each {
+        writer.println "<item type=\"id\" name=\"${it}\" />"
+    }
+    writer.println "</resources>"
+    writer.close()
+}
+
+class Item {
+
+    def type
+    def name
+    def id
+
+    Item(type, name, id) {
+        this.type = type
+        this.name = name
+        this.id = id
+    }
+
+
+    @Override
+    public String toString() {
+        return "\nItem{" +
+                "type=" + type +
+                ", name=" + name +
+                ", id=" + id +
+                '}'
+    }
+}
