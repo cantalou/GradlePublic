@@ -26,12 +26,8 @@ afterEvaluate {
             }
 
             def skipItem = [] as HashSet
-            def skipXmlContent
-            if (skipFile.exists() && !(skipXmlContent = skipFile.getText()).empty) {
-                def skipResources = new XmlSlurper().parseText(skipXmlContent)
-                skipResources.public.each {
-                    skipItem << it.@name.text()
-                }
+            skipItem.addAll(getItems(skipFile))
+            if (!skipItem.empty) {
                 println("存在需要忽略的节点数:${skipItem.size()}")
             }
 
@@ -48,80 +44,51 @@ afterEvaluate {
             }
 
             //新导出的public节点
-            def newItemSet = []
-            def resources = new XmlSlurper().parse(generatedPublic)
-            resources.public.each {
-                newItemSet << it.@name.text()
-            }
+            def newItem = []
+            newItem.addAll(getItems(generatedPublic))
 
             //旧的public节点
             def oldItem = []
             def deletedItem = []
-            def oldResources = new XmlSlurper().parse(publicFile)
-            oldResources.public.each {
-                def name = it.@name.text()
-                def type = it.@type.text()
-                def id = it.@id.text()
-                if (newItemSet.contains(name)) {
-                    oldItem << new Item(type, name, id)
-                } else if (!skipItem.contains(name)) {
-                    deletedItem << new Item(type, name, id)
-                } else {
+            def newItemSet = [] as HashSet
+            newItemSet.addAll(newItem)
+            getItems(publicFile).each {
+                if (skipItem.contains(it)) {
                     //被忽略的节点
+                } else if (newItemSet.contains(it)) {
+                    oldItem << it
+                } else {
+                    //旧public文件存在, 但新public文件里面删除的节点
+                    deletedItem << it
                 }
             }
 
             def buildType = variant.getBuildType()
             def releaseMode = buildType.isMinifyEnabled() && buildType.name.equalsIgnoreCase("release")
 
-            def padding = []
+            def padding = getItems(paddingFile)
+            println "旧public-padding.xml 文件存在,已有节点${padding.toString()}"
+
             if (deletedItem.size() > 0) {
-
-                def publicPaddingXmlText
-                if (paddingFile.exists() && !(publicPaddingXmlText = paddingFile.getText()).empty) {
-                    def paddingResources = new XmlSlurper().parseText(publicPaddingXmlText)
-                    paddingResources.children().each {
-                        def type = it.@type.text()
-                        def id = it.@start.text()
-                        def name = it.@name.text()
-                        padding << new Item(type, name, id)
-                    }
-                    println "旧public-padding.xml 文件存在,已有节点${padding.toString()}"
-                }
-
                 if (releaseMode) {
-                    skipItem.addAll(deletedItem*.name)
-                    def paddingItemName = padding*.name
-                    skipFile.withWriter { out ->
-                        out.println("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<resources>")
-                        skipItem.each {
-                            if (!paddingItemName.contains(it)) {
-                                out.println("<public name=\"${it}\"/>")
-                            }
-                        }
-                        out.println("</resources>")
-                    }
+                    skipItem.addAll(deletedItem)
+                    writeSkipXml skipItem
                     writePublicXml oldItem
                     reorderPublicXml skipItem
                     generateId("${valuesDir}/values.xml")
                     println "Release模式下存在删除的节点:${deletedItem.size()}, 将节点添加到skip.xml文件中,skip节点:${skipItem.size()}"
-
                 } else {
 
-                    def deleteItemIds = padding*.id
-                    deletedItem.each {
-                        if (!deleteItemIds.contains(it.id)) {
-                            padding << it
-                        }
-                    }
-                    //重新生成public-padding节点
-                    paddingFile.withWriter { out ->
-                        out.println("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<resources>")
-                        padding.each {
-                            out.println("<public-padding type=\"${it.type}\" name=\"${it.type + it.id.substring(6, 10)}\" start=\"${it.id}\" end=\"${it.id}\"/>")
-                        }
-                        out.println("</resources>")
-                    }
+                    padding.addAll(deletedItem)
+//                    def paddingIds = padding*.id
+//                    deletedItem.each {
+//                        //clean build的时候,根据重新生成的public.xml计算出来的被删除的节点, 是包含所有被删除的节点(所有版本),padding.xml中包含了以前版本生成的被删除的节点, 这里需要过滤
+//                        //对于同一个文件可能删除后又加进来, 或者删除后下次加进来同名但是内容不同,这里根据id进行过滤
+//                        if (!paddingIds.contains(it.id)) {
+//                            padding << it
+//                        }
+//                    }
+                    writePaddingXml(padding)
                     writePublicXml oldItem
                     generateId("${valuesDir}/values.xml")
                     println "Debug模式下存在被删除的节点, 新版本public.xml 文件删除了${deletedItem.size}个资源, 增加public-padding节点,总数:${padding.size()}"
@@ -144,15 +111,18 @@ afterEvaluate {
                 return
             }
 
-            println "newSize:${newItemSet.size()},oldSize:${oldItem.size()},paddingSize:${padding.size()},skipSize:${skipItem.size()} containsAll:${newItemSet.containsAll(oldItem*.name)}"
-            if (newItemSet.size() == oldItem.size() + padding.size()  && newItemSet.containsAll(oldItem*.name)) {
+            def oldSize = oldItem.size() + padding.size() + (releaseMode ? 0 : skipItem.size())
+            println "newSize:${newItem.size()},oldSize:${oldItem.size()},paddingSize:${padding.size()},skipSize:${skipItem.size()} containsAll:${newItem.containsAll(oldItem)}"
+            if (newItem.size() == oldSize && newItem.containsAll(oldItem)) {
                 println "新旧public文件内容相同"
             } else {
                 println "values文件夹存在public.xml文件,有新增节点, 直接复制一份"
-                copy {
-                    from generatedPublic
-                    into publicDir
+                if (!padding.empty) {
+                    newItem.removeAll { item ->
+                        padding.any { it.id.equals(item.id) }
+                    }
                 }
+                writePublicXml newItem
                 reorderPublicXml skipItem
                 println "重新生成ids.xml文件"
                 generateId("${valuesDir}/values.xml")
@@ -220,22 +190,19 @@ def reorderPublicXml(def skipItem) {
     }
 
     println "存在skip.xml文件重新排序资源id,从public.xml文件中删除"
-    def resources = new XmlSlurper().parse(publicFile)
     def oldItemMap = [:] as LinkedHashMap
     def oldItem = []
-    resources.public.each {
-        def name = it.@name.text()
-        def type = it.@type.text()
-        def id = it.@id.text()
-        if (!skipItem.contains(name)) {
-            def list = oldItemMap.get(type)
+    getItems(publicFile).each {
+        if (!skipItem.contains(it)) {
+            def list = oldItemMap.get(it.type)
             if (list == null) {
                 list = []
-                oldItemMap.put(type, list)
+                oldItemMap.put(it.type, list)
             }
-            list << new Item(type, name, id)
+            list << it
         }
     }
+    def paddingIds = getItems(paddingFile).collect { Integer.parseInt(it.id.substring(2), 16) } as HashSet
     oldItemMap.each { k, v ->
         java.util.Collections.sort(v, new Comparator<Item>() {
             @Override
@@ -243,14 +210,18 @@ def reorderPublicXml(def skipItem) {
                 return lhs.id.compareTo(rhs.id)
             }
         })
-        def id = 0
+        def newId = Integer.parseInt(v.get(0).id.substring(2), 16) & 0xFFFF0000
         v.each {
-            it.id = "0x" + Long.toString((Integer.parseInt(it.id.substring(2), 16) & 0xFFFF0000 | id++), 16)
+            while (paddingIds.contains(newId)) {
+                newId++
+            }
+            it.id = "0x" + Long.toString(newId, 16)
+            newId++
             oldItem << it
         }
     }
 
-    def padding = getPublicPaddingItem()
+    def padding = getItems(paddingFile)
     def size = padding.size()
     for (int i = 0; i < padding.size(); i++) {
         def item = padding.get(i)
@@ -260,32 +231,41 @@ def reorderPublicXml(def skipItem) {
         }
     }
     if (size > padding.size()) {
-        writePublicPaddingXml padding
+        writePaddingXml padding
     }
 
     writePublicXml oldItem
 }
 
-def getPublicPaddingItem() {
+def getItems(def file) {
     def padding = []
-    def publicPaddingXmlText
-    if (paddingFile.exists() && !(publicPaddingXmlText = paddingFile.getText()).empty) {
-        def paddingResources = new XmlSlurper().parseText(publicPaddingXmlText)
+    def text
+    if (file.exists() && !(text = file.getText()).empty) {
+        def paddingResources = new XmlSlurper().parseText(text)
         paddingResources.children().each {
-            def type = it.@type.text()
-            def id = it.@start.text()
-            def name = it.@name.text()
-            padding << new Item(type, name, id)
+            padding << new Item(it)
         }
     }
     padding
 }
 
-def writePublicPaddingXml(def paddingItem) {
+def writeSkipXml(def items) {
+    skipFile.withWriter { out ->
+        out.println("<?xml version=\"1.0\" encoding=\"utf-8\"?>")
+        out.println("<resources>")
+        items.each {
+            out.println("<public name=\"${it.name}\" type=\"${it.type}\" id=\"\"/>")
+        }
+        out.println("</resources>")
+    }
+}
+
+def writePaddingXml(def items) {
     paddingFile.withWriter { out ->
-        out.println("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<resources>")
-        paddingItem.each {
-            out.println("<public-padding type=\"${it.type}\" name=\"${it.type + it.id.substring(6, 10)}\" start=\"${it.id}\" end=\"${it.id}\"/>")
+        out.println("<?xml version=\"1.0\" encoding=\"utf-8\"?>")
+        out.println("<resources>")
+        items.each {
+            out.println("<public-padding type=\"${it.type}\" name=\"${it.name}\" start=\"${it.id}\" end=\"${it.id}\" id=\"${it.id}\"/>")
         }
         out.println("</resources>")
     }
@@ -293,7 +273,8 @@ def writePublicPaddingXml(def paddingItem) {
 
 def writePublicXml(def items) {
     publicFile.withWriter { out ->
-        out.println("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<resources>")
+        out.println("<?xml version=\"1.0\" encoding=\"utf-8\"?>")
+        out.println("<resources>")
         items.each {
             out.println("<public type=\"${it.type}\" name=\"${it.name}\"  id=\"${it.id}\" />")
         }
@@ -353,7 +334,7 @@ def generateId(def valueFile) {
     def destIds = file("${publicDir}/ids.xml")
     destIds.withWriter { out ->
         out.println "<?xml version=\"1.0\" encoding=\"utf-8\"?>"
-        out.println "<resources>\n"
+        out.println "<resources>"
         ids.each {
             out.println "<item type=\"id\" name=\"${it}\" />"
         }
@@ -367,21 +348,21 @@ class Item {
     def name
     def id
 
-    Item(type, name, id) {
-        this.type = type
-        this.name = name
-        this.id = id
+    Item(def node) {
+        this.type = node.@type.text()
+        this.name = node.@name.text()
+        this.id = node.@id.text()
     }
 
     boolean equals(o) {
         if (this.is(o)) return true
         if (getClass() != o.class) return false
         Item item = (Item) o
-        return name.equals(item.name)
+        return name.equals(item.name) && type.equals(item.type)
     }
 
     int hashCode() {
-        return name.hashCode()
+        return name.hashCode() * 37 + type.hashCode()
     }
 
     @Override
