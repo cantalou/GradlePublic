@@ -11,3 +11,6 @@ It is used to make the generated resource id identical every time when build tas
 Support:   
 1.Resource add and delete  
 2.Compile dependency and empty implement in release dependency  
+
+### genTypeNameId.gradle
+It is used to generate a file which contains line base text formating color and drawable resources by "type:name:id" into assets dir.
