@@ -6,17 +6,71 @@ file(publicDir).mkdirs()
 ext.publicFile = file("${publicDir}/public.xml")
 ext.paddingFile = file("${publicDir}/padding.xml")
 ext.skipFile = file("${publicDir}/skip.xml")
+ext.timestampFile = file("${publicDir}/timestamp.txt")
 
 afterEvaluate {
     android.applicationVariants.each { variant ->
 
         def capitalizeName = variant.name.capitalize()
-
         def mergeTask = tasks.findByName("merge${capitalizeName}Resources")
+
+        mergeTask.doLast {
+
+            def change = false;
+            def newTimestampMap = [:]
+            getTimestamp file("${projectDir}/src/main/res"), newTimestampMap
+
+            def oldTimestampMap = [:]
+            if (timestampFile.exists()) {
+                timestampFile.eachLine {
+                    if (it.size() > 0) {
+                        def item = it.split(":")
+                        oldTimestampMap.put(item[0], item[1])
+                    }
+                }
+            } else {
+                change = true
+            }
+
+            if (!change) {
+                if (newTimestampMap.size() < oldTimestampMap.size()) {
+                    ['ids.xml', 'public.xml', 'padding.xml'].each {
+                        file("${mergeTask.outputDir}/values/${it}").delete()
+                    }
+                    println "新资源删除了资源, 删除values下 'ids.xml', 'public.xml', 'padding.xml' 文件"
+                    change = true
+                }
+            }
+
+            if (!change) {
+                oldTimestampMap.each { entry ->
+                    if (!change && !(Long.parseLong(entry.value) == newTimestampMap.get(entry.key))) {
+
+                        ['ids.xml', 'public.xml', 'padding.xml'].each {
+                            file("${mergeTask.outputDir}/values/${it}").delete()
+                        }
+                        println "文件${entry.value}失效, 删除values下 'ids.xml', 'public.xml', 'padding.xml' 文件"
+                        change = true
+                    }
+                }
+            }
+
+            if (change) {
+                timestampFile.withWriter { out ->
+                    newTimestampMap.each { k, v ->
+                        out.println "${k}:${v}"
+                    }
+                }
+                println "Update timestampFile"
+            } else {
+                println "timestampFile UP-TO-DATE"
+            }
+        }
+
         def task = tasks.findByName("process${capitalizeName}Resources");
         task.doLast {
 
-            println "\n开始执行keep resource id 任务"
+            println "开始执行keep resource id 任务"
             def valuesDir = "${mergeTask.outputDir}/values"
 
             def generatedPublic = file("${buildDir}/outputs/public.xml")
@@ -81,7 +135,7 @@ afterEvaluate {
                     writePublicXml oldItem
                     reorderPublicXml skipItem
                     generateId("${valuesDir}/values.xml")
-                    println "Debug模式下存在被删除的节点, 新版本public.xml 文件删除了${deletedItem.size}个资源, 增加public-padding节点,总数:${padding.size()}"
+                    println "Debug模式下存在被删除的节点, 新版本public.xml 文件删除了${deletedItem.size()}个资源, 增加public-padding节点,总数:${padding.size()}"
                 }
             }
 
@@ -131,6 +185,61 @@ afterEvaluate {
             }
         }
     }
+
+
+    task buildJarTask(type: Jar) {
+
+        destinationDir = file("${buildDir}/intermediates/bundles/")
+        appendix = ""
+        baseName = "androidJar"
+        version = "1.0.0"
+        classifier = "debug"
+
+        //后缀名
+        extension = "jar"
+        archiveName = "class.jar"
+
+        //需打包的资源所在的路径集
+        def srcClassDir = []
+        android.applicationVariants.all { variant ->
+            srcClassDir.add("${project.buildDir.absolutePath}/intermediates/classes/${variant.dirName}")
+        }
+        //初始化资源路径集
+        from srcClassDir
+    }
+
+
+    if (gradle.startParameter.taskNames.find {
+        it.contains("assemble")
+    } != null) {
+        //第4件事
+        android.applicationVariants.all { variant ->
+            tasks.each { task ->
+                if (task.name.equalsIgnoreCase("assemble" + variant.name)) {
+                    task.doLast {
+                        println "导出jar包"
+                        buildJarTask.execute()
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+void getTimestamp(File file, def timestampMap) {
+    if (!file.exists()) {
+        return
+    }
+
+    if (file.isDirectory()) {
+        file.listFiles().each {
+            getTimestamp it, timestampMap
+        }
+    } else {
+        timestampMap.put file.name, file.lastModified()
+    }
+    timestampMap
 }
 
 /**
