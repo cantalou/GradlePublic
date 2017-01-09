@@ -55,12 +55,16 @@ afterEvaluate {
                 }
             }
 
+            if (change) {
                 timestampFile.withWriter { out ->
                     newTimestampMap.each { k, v ->
                         out.println "${k}:${v}"
                     }
                 }
                 println "Update timestampFile"
+            } else {
+                println "timestampFile UP-TO-DATE"
+            }
         }
 
         def task = tasks.findByName("process${capitalizeName}Resources");
