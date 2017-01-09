@@ -6,7 +6,6 @@ afterEvaluate {
 
         def capitalizeName = variant.name.capitalize()
 
-        println variant.buildType
         def compileTask = tasks.findByName("compile${capitalizeName}Sources")
         compileTask.doLast {
 
