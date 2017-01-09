@@ -14,60 +14,10 @@ afterEvaluate {
         def capitalizeName = variant.name.capitalize()
         def mergeTask = tasks.findByName("merge${capitalizeName}Resources")
 
-        mergeTask.doLast {
-
-            def change = false;
-            def newTimestampMap = [:]
-            getTimestamp file("${projectDir}/src/main/res"), newTimestampMap
-
-            def oldTimestampMap = [:]
-            if (timestampFile.exists()) {
-                timestampFile.eachLine {
-                    if (it.size() > 0) {
-                        def item = it.split(":")
-                        oldTimestampMap.put(item[0], item[1])
-                    }
-                }
-            } else {
-                change = true
-            }
-
-            if (!change) {
-                if (newTimestampMap.size() < oldTimestampMap.size()) {
-                    ['ids.xml', 'public.xml', 'padding.xml'].each {
-                        file("${mergeTask.outputDir}/values/${it}").delete()
-                    }
-                    println "新资源删除了资源, 删除values下 'ids.xml', 'public.xml', 'padding.xml' 文件"
-                    change = true
-                }
-            }
-
-            if (!change) {
-                oldTimestampMap.each { entry ->
-                    if (!change && !(Long.parseLong(entry.value) == newTimestampMap.get(entry.key))) {
-
-                        ['ids.xml', 'public.xml', 'padding.xml'].each {
-                            file("${mergeTask.outputDir}/values/${it}").delete()
-                        }
-                        println "文件${entry.value}失效, 删除values下 'ids.xml', 'public.xml', 'padding.xml' 文件"
-                        change = true
-                    }
-                }
-            }
-
-            if (change) {
-                timestampFile.withWriter { out ->
-                    newTimestampMap.each { k, v ->
-                        out.println "${k}:${v}"
-                    }
-                }
-                println "Update timestampFile"
-            } else {
-                println "timestampFile UP-TO-DATE"
-            }
-        }
-
         def task = tasks.findByName("process${capitalizeName}Resources");
+        mergeTask.doLast {
+            updateTimestamp(mergeTask)
+        }
         task.doLast {
 
             println "开始执行keep resource id 任务"
@@ -226,6 +176,63 @@ afterEvaluate {
     }
 }
 
+/**
+ * 更新res文件夹最后修改时间
+ * @param mergeTask
+ */
+void updateTimestamp(def mergeTask) {
+
+    def change = false;
+    def newTimestampMap = [:]
+    getTimestamp file("${projectDir}/src/main/res"), newTimestampMap
+
+    def oldTimestampMap = [:]
+    if (timestampFile.exists()) {
+        timestampFile.eachLine {
+            if (it.size() > 0) {
+                def item = it.split(":")
+                oldTimestampMap.put(item[0], item[1])
+            }
+        }
+    } else {
+        change = true
+    }
+
+    if(oldTimestampMap.isEmpty()){
+        change = true
+    }
+
+    if (!change) {
+        if (newTimestampMap.size() < oldTimestampMap.size()) {
+            change = true
+        }
+    }
+
+    if (!change) {
+        oldTimestampMap.each { entry ->
+            if (!change && !(Long.parseLong(entry.value) == newTimestampMap.get(entry.key))) {
+                println "文件${entry.value}已更新"
+                change = true
+            }
+        }
+    }
+
+    if (change) {
+        ['ids.xml', 'public.xml', 'padding.xml'].each {
+            file("${mergeTask.outputDir}/values/${it}").delete()
+        }
+        println " 删除values下 'ids.xml', 'public.xml', 'padding.xml' 文件"
+
+        timestampFile.withWriter { out ->
+            newTimestampMap.each { k, v ->
+                out.println "${k}:${v}"
+            }
+        }
+        println "Update timestampFile"
+    } else {
+        println "timestampFile UP-TO-DATE"
+    }
+}
 
 void getTimestamp(File file, def timestampMap) {
     if (!file.exists()) {
@@ -342,7 +349,12 @@ def writePaddingXml(def items) {
         out.println("<?xml version=\"1.0\" encoding=\"utf-8\"?>")
         out.println("<resources>")
         items.each {
-            out.println("<public-padding type=\"${it.type}\" name=\"${it.name}\" start=\"${it.id}\" end=\"${it.id}\" id=\"${it.id}\"/>")
+            def suf = ${it.id.substring(6,10)}
+            String name = it.name
+            if(!name.endsWith(suf)){
+                name += suf
+            }
+            out.println("<public-padding type=\"${it.type}\" name=\"${name}\" start=\"${it.id}\" end=\"${it.id}\" id=\"${it.id}\"/>")
         }
         out.println("</resources>")
     }
