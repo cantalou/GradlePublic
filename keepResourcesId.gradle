@@ -59,6 +59,7 @@ afterEvaluate {
                     newTimestampMap.each { k, v ->
                         out.println "${k}:${v}"
                     }
+                }
                 println "Update timestampFile"
         }
 
