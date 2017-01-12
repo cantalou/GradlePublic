@@ -2,6 +2,25 @@ apply plugin: 'com.jfrog.bintray'
 apply plugin: 'maven'
 apply plugin: 'maven-publish'
 
+if (project.gradle.startParameter.taskNames.contains("bintray") && hasProperty("PROJ_VERSION")) {
+    String oldVersion = getProperty("PROJ_VERSION")
+    int index = oldVersion.lastIndexOf(".")
+    def version
+    if (index == -1) {
+        version = Integer.toString(Integer.parseInt(oldVersion.substring(0)) + 1)
+    } else {
+        version = oldVersion.substring(0, index + 1) + Integer.toString(Integer.parseInt(oldVersion.substring(index + 1)) + 1)
+    }
+    println "update version from ${oldVersion} to ${version} "
+    setProperty("PROJ_VERSION", version)
+
+    def propertiesFile = file("${projectDir}/gradle.properties")
+    def newContent = propertiesFile.getText("UTF-8").replace(oldVersion, version)
+    propertiesFile.withWriter { out ->
+        out << newContent
+    }
+}
+
 task sourcesJar(type: Jar) {
     from android.sourceSets.main.java.srcDirs
     classifier = 'sources'
