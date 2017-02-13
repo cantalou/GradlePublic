@@ -35,7 +35,6 @@ afterEvaluate {
 
 
             if (!change) {
-
                 if (newTimestampMap.size() != oldTimestampMap.size()) {
                     change = true
                     println "文件数量发生变化 新文件数量:${newTimestampMap.size()}, 旧文件数量:${oldTimestampMap.size()}"
