@@ -18,7 +18,12 @@ afterEvaluate {
 
             def splitDataFlat = "#:#"
             def change = false;
-            def newTimestampMap = getTimestamp(file("${projectDir}/src/main/res"))
+            def resDir = android.sourceSets.main.res.srcDirs[0]
+            println resDir
+            if(!resDir){
+                resDir = "${projectDir}/src/main/res"
+            }
+            def newTimestampMap = getTimestamp(file(resDir.toString()))
 
             def oldTimestampMap = [:]
             if (timestampFile.exists()) {
