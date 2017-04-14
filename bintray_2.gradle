@@ -2,7 +2,12 @@ apply plugin: 'com.jfrog.bintray'
 apply plugin: 'maven'
 apply plugin: 'maven-publish'
 
-if (project.gradle.startParameter.taskNames.contains("bintray") && hasProperty("PROJ_VERSION")) {
+ext{
+    version
+
+}
+
+if (project.gradle.startParameter.taskNames.contains("bintray")) {
     String oldVersion = getProperty("PROJ_VERSION")
     int index = oldVersion.lastIndexOf(".")
     def version
@@ -13,11 +18,19 @@ if (project.gradle.startParameter.taskNames.contains("bintray") && hasProperty("
     }
     println "update version from ${oldVersion} to ${version} "
     setProperty("PROJ_VERSION", version)
+    project.ext.set("PRE_PROJ_VERSION",oldVersion)
+}
 
-    def propertiesFile = file("${projectDir}/gradle.properties")
-    def newContent = propertiesFile.getText("UTF-8").replace(oldVersion, version)
-    propertiesFile.withWriter { out ->
-        out << newContent
+afterEvaluate {
+    tasks.findByName("bintrayUpload").doLast {
+        String oldVersion = getProperty("PRE_PROJ_VERSION")
+        String version = getProperty("PROJ_VERSION")
+        println "upload success write new version ${version} to file"
+        def propertiesFile = file("${projectDir}/gradle.properties")
+        def newContent = propertiesFile.getText("UTF-8").replace(oldVersion, version)
+        propertiesFile.withWriter { out ->
+            out << newContent
+        }
     }
 }
 
@@ -85,18 +98,18 @@ publishing {
             pom.withXml {
                 def root = asNode()
                 def dependenciesNode = root.appendNode('dependencies')
-                configurations.compile.allDependencies.findAll { it.name != 'unspecified' && it.name != null}.each {
+                configurations.compile.allDependencies.findAll { it.name != 'unspecified' && it.name != null }.each {
                     def dependencyNode = dependenciesNode.appendNode('dependency')
                     dependencyNode.appendNode('groupId', it.group)
                     dependencyNode.appendNode('artifactId', it.name)
                     dependencyNode.appendNode('version', it.version)
-                    
+
                     if (it.excludeRules.size() > 0) {
                         def exclusionsNode = dependencyNode.appendNode('exclusions')
                         it.excludeRules.each { rule ->
-                           def exclusionNode = exclusionsNode.appendNode('exclusion')
-                           exclusionNode.appendNode('groupId', rule.group)
-                           exclusionNode.appendNode('artifactId', rule.module)
+                            def exclusionNode = exclusionsNode.appendNode('exclusion')
+                            exclusionNode.appendNode('groupId', rule.group)
+                            exclusionNode.appendNode('artifactId', rule.module)
                         }
                     }
                 }
