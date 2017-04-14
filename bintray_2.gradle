@@ -2,11 +2,6 @@ apply plugin: 'com.jfrog.bintray'
 apply plugin: 'maven'
 apply plugin: 'maven-publish'
 
-ext{
-    version
-
-}
-
 if (project.gradle.startParameter.taskNames.contains("bintray")) {
     String oldVersion = getProperty("PROJ_VERSION")
     int index = oldVersion.lastIndexOf(".")
