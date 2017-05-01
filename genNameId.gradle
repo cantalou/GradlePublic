@@ -16,13 +16,14 @@ afterEvaluate {
                 def type = it.@type.text()
                 def name = it.@name.text()
                 def id = it.@id.text().substring(2)
-                if ("color".equals(type) || "drawable".equals(type)) {
+                if ("color".equals(type) || "drawable".equals(type) || "mipmap".equals(type)) {
                     items << [type, name, id]
                 }
             }
 
             //写入文件
             if (items.size() > 0) {
+                file("${buildDir}/intermediates/assets/${capitalizeName}").mkdirs()
                 file("${buildDir}/intermediates/assets/${capitalizeName}/nameId.txt").withWriter("UTF-8", { w ->
                     items.each { item ->
                         item.each {
