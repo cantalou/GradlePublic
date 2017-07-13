@@ -84,7 +84,7 @@ def pomConfig = {
 
 publishing {
     publications {
-        MyPublication(MavenPublication) {
+        aarPublication(MavenPublication) {
 
             groupId PROJ_GROUP
             artifactId PROJ_ARTIFACTID
@@ -119,7 +119,7 @@ publishing {
             }
         }
 
-        JarPublication(MavenPublication) {
+        jarPublication(MavenPublication) {
 
             groupId PROJ_GROUP
             artifactId PROJ_ARTIFACTID
@@ -160,7 +160,20 @@ bintray {
     user = BINTRAY_USER
     key = BINTRAY_KEY
 
-    publications = ['MyPublication', 'JarPublication']
+    def publicType = "all"
+
+    if (project.hasProperty("publicType")) {
+        publicType = getProperty("publicType")
+    }
+
+    if (publicType == "all") {
+        publications = ['aarPublication', 'jarPublication']
+    } else if (publicType == "aar") {
+        publications = ['aarPublication']
+    } else if (publicType == "jar") {
+        publications = ['jarPublication']
+    }
+
     publish = true //[Default: false] Whether version should be auto published after an upload
     pkg {
         repo = 'maven'
