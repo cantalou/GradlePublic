@@ -2,6 +2,24 @@
 
 ### bintray_2.gradle
 It is used to public you project to jcenter. Working base on gradle 2.14.1 and gradle android plugin 2.1.3  
+> 1. add follow to build.gradle file of library project
+  apply from : "https://raw.githubusercontent.com/cantalou/GradlePublic/master/bintray_2.gradle"  
+  
+> 2. add follow properties to gradle.properties of library project
+  BINTRAY_USER=****
+  BINTRAY_KEY****
+  PROJ_GROUP=****
+  PROJ_VERSION=****(format 1.0.1)
+  PROJ_NAME=****
+  PROJ_WEBSITEURL=****
+  PROJ_ISSUETRACKERURL=****
+  PROJ_VCSURL=****
+  PROJ_DESCRIPTION=****
+  PROJ_ARTIFACTID=****
+  DEVELOPER_ID=****
+  DEVELOPER_NAME=****
+  DEVELOPER_EMAIL=****
+  
 > gradle aR bintray --info -PpublicType=all   
 > publicType has three value : all , aar, jar
 
