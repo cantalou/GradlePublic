@@ -2,10 +2,13 @@
 
 ### bintray_2.gradle
 It is used to public you project to jcenter. Working base on gradle 2.14.1 and gradle android plugin 2.1.3  
-> 1. add follow to build.gradle file of library project
+> 1. add build dependency config to root project build.gradle file
+  classpath 'com.jfrog.bintray.gradle:gradle-bintray-plugin:1.7'
+  
+> 2. add follow to build.gradle file of library project  
   apply from : "https://raw.githubusercontent.com/cantalou/GradlePublic/master/bintray_2.gradle"  
   
-> 2. add follow properties to gradle.properties of library project
+> 3. add follow properties to gradle.properties of library project
   BINTRAY_USER=****  
   BINTRAY_KEY****  
   PROJ_GROUP=****  
