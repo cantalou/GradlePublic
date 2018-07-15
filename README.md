@@ -8,7 +8,7 @@ It is used to public your project to jcenter. Working base on gradle 2.14.1 and 
 > 2. add follow to build.gradle file of library project  
   apply from : "https://raw.githubusercontent.com/cantalou/GradlePublic/master/bintray_2.gradle"  
   
-> 3. add follow properties to gradle.properties of library project
+> 3. add follow properties to gradle.properties of library project  
   BINTRAY_USER=****  
   BINTRAY_KEY****  
   PROJ_GROUP=****  
