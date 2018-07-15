@@ -1,7 +1,7 @@
 # GradlePublic
 
 ### bintray_2.gradle
-It is used to public you project to jcenter. Working base on gradle 2.14.1 and gradle android plugin 2.1.3  
+It is used to public your project to jcenter. Working base on gradle 2.14.1 and gradle android plugin 2.1.3  
 > 1. add build dependency config to root project build.gradle file
   classpath 'com.jfrog.bintray.gradle:gradle-bintray-plugin:1.7'
   
